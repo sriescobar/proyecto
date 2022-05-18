@@ -1,0 +1,83 @@
+***¿Por qué instalar una replicacion master-master?***
+La replicación maestro-esclavo en bases de datos MySQL proporciona equilibrio de carga para las bases de datos.
+Pero no proporciona ningún escenario de conmutación por error. Si el servidor maestro se rompe, 
+no podemos ejecutar consultas directamente en el servidor esclavo. 
+Además del equilibrio de carga, si necesitamos conmutación por error en nuestro escenario, 
+podemos configurar 2 instancias de MySQL en la replicación maestro-maestro.
+
+En la replicación de maestro maestro, ambos servidores desempeñan el papel de maestro y esclavo entre sí.
+
+***Paso 1 Instalacion de servidor mysql en los servidores mysql1 (192.168.0.20) y mysql2 (192.168.0.21)***
+
+sudo -i
+apt-get update && sudo apt-get install mysql-client mysql-server
+***Este comando instala el servidor y el cliente mysql***
+
+***Paso 2 configurar MySQL para escuchar en una dirección IP privada***
+
+***Editar el archivo***
+vi /etc/my.cnf.d/mysql-server.cnf
+
+***En mysql1 (192.168.0.20)***
+bind-address = 192.168.0.20
+server-id = 1
+log_bin = /var/log/mysql/mysqld.log
+binlog_do_db = serviciosdb
+
+***En mysql2 (192.168.0.21)***
+bind-address = 192.168.0.21
+server-id = 2
+log_bin = /var/log/mysql/mysqld.log
+binlog_do_db = serviciosdb
+
+***Reiniciar el servicio***
+service mysql restart
+
+***Paso 3 crear un usuario de replicación***
+
+***Conectarse a mysql***
+mysql -u root -p
+
+***Crear usuario en mysql1***
+CREATE USER 'repusermysql1'@'%' identified by 'root';
+GRANT REPLICATION SLAVE ON *.* TO 'repusermysql1'@'%';
+ALTER USER 'repusermysql1'@'%' identified with mysql_native_password by 'root';
+
+***Crear usuario en mysql2***
+CREATE USER 'repusermysql2'@'%' identified by 'root';
+GRANT REPLICATION SLAVE ON *.* TO 'repusermysql2'@'%';
+ALTER USER 'repusermysql2'@'%' identified with mysql_native_password by 'root';
+
+*** Paso 4 configurar MySQL Master en ambos servidores***
+
+***Comprobar el estado de Master***
+show master status;
+
+***La siguiente inforacion es de ejemplo:
+necesitamos 2 piezas de información: el Archivo (mysql-bin.000001) y la Posición (1447) 
+la informacion obtenida en mysql1 va en MASTER_LOG_FILE = 'mysql-bin.000001', MASTER_LOG_POS = 1447 
+y viceversa***
+
+***Ejecute los siguientes comandos en mysql1 para decirle que mysql2 es su amo***
+
+stop slave;
+CHANGE MASTER TO MASTER_HOST = '192.168.0.21', MASTER_USER = 'repusermysql2', MASTER_PASSWORD = 'root', MASTER_LOG_FILE = 'mysqld.000008', MASTER_LOG_POS = 156;
+start slave;
+
+***Ejecute los siguientes comandos en mysql2 para decirle que mysql1 es su amo***
+
+stop slave;
+CHANGE MASTER TO MASTER_HOST = '192.168.0.20', MASTER_USER = 'repusermysql1', MASTER_PASSWORD = 'root', MASTER_LOG_FILE = 'mysqld.000007', MASTER_LOG_POS = 744;
+start slave;
+
+***Prueba***
+***En mysql1***
+create database serviciosdb;
+***En mysql2***
+create table serviciosdb.test ( id INT, name VARCHAR(20));
+***En mysql1***
+insert into serviciosdb.test(id, name) values (1, 'mysql1');
+***En mysql2***
+insert into serviciosdb.test(id, name) values (2, 'mysql2');
+***En los dos servidores de mysql***
+select * from serviciosdb.test;

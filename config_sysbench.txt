@@ -1,0 +1,32 @@
+***Instalar sysbench***
+sudo yum -y install epel-release
+sudo yum -y install sysbench
+sudo yum install make automake libtool pkg-config libaio-devel
+sudo yum -y install libmysqlclient-dev libssl-dev
+sudo yum -y install mysql-community-devel libssl-dev
+
+
+***Crear las tablas en las bases de datos mysql1 y mysql2***
+sysbench --db-driver=mysql --mysql-user=haproxy_root --mysql-password=root \
+  --mysql-host=127.0.0.1 --mysql-port=3306 --mysql-db=serviciosdb --range_size=100 \
+  --table_size=100000 --tables=10 --threads=2 --events=0 --time=60 \
+  --rand-type=uniform /usr/share/sysbench/oltp_read_write.lua prepare >> /home/mysysbench.log
+
+***Ejecutar el test de sysbench, el log se guarda en /home/mysysbench.log***
+sysbench --db-driver=mysql --mysql-user=haproxy_root --mysql-password=root \
+  --mysql-host=127.0.0.1 --mysql-port=3306 --mysql-db=serviciosdb --range_size=100 \
+  --table_size=100000 --tables=10 --threads=2 --events=0 --time=60 \
+  --rand-type=uniform /usr/share/sysbench/oltp_read_write.lua run >> /home/mysysbench.log
+
+***Limpiar todo para hacer otra prueba***
+sysbench --db-driver=mysql --mysql-user=haproxy_root --mysql-password=root \
+  --mysql-host=127.0.0.1 --mysql-port=3306 --mysql-db=serviciosdb --range_size=100 \
+  --table_size=100000 --tables=10 --threads=2 --events=0 --time=60 \
+  --rand-type=uniform /usr/share/sysbench/oltp_read_write.lua cleanup >> /home/mysysbench.log
+
+***para ver el log***
+vi /home/mysysbench.log
+
+***para limpiar el log***
+:> /home/mysysbench.log
+

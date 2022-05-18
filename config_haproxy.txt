@@ -1,0 +1,84 @@
+***Instalación del balanceador de carga HAproxy***
+
+sudo -i
+yum install haproxy mysql
+***Este comando instala haproxy y el cliente mysql***
+
+***Configuración de HAproxy***
+cp /etc/haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg.orginal
+vi /etc/haproxy/haproxy.cfg
+
+***El archivo haproxy.cfg debe quedar así***
+global
+log         127.0.0.1 local2
+
+    chroot      /var/lib/haproxy
+    pidfile     /var/run/haproxy.pid
+    maxconn     4000
+    user        haproxy
+    group       haproxy
+    daemon
+ 
+defaults
+    defaults
+    mode                    http
+    log                     global
+    option                  httplog
+    option                  dontlognull
+    option http-server-close
+    option forwardfor       except 127.0.0.0/8
+    option                  redispatch
+    retries                 2
+    timeout http-request    10s
+    timeout queue           1m
+    timeout connect         3000
+    timeout client          5000
+    timeout server          5000
+    timeout http-keep-alive 10s
+    timeout check           10s
+    maxconn                 3000
+
+listen mysql-cluster
+    backend static
+    balance     roundrobin
+    server      static 127.0.0.1:3306 check
+    mode tcp
+    #option mysql-check user haproxy_check
+    backend app
+    option tcp-check
+    balance     roundrobin
+    server  msql1 192.168.0.20:3306 check
+    server  msql2 192.168.0.21:3306 check
+
+frontend main
+    bind *:8080
+    mode http
+    stats enable
+    stats uri /
+    stats realm Strictly\ Private
+    stats auth admin:admin
+    acl url_static       path_beg       -i /static /images /javascript /stylesheets
+    acl url_static       path_end       -i .jpg .gif .png .css .js
+    default_backend             app
+
+***Reiniciar el servicio haproxy***
+service haproxy restart
+
+***En los servidores mysql1 y mysql2 creamos 2 usuarios uno de consulta haproxy_check 
+y otro para hacer las consultas sql haproxy_root***
+
+mysql -u root -p
+
+INSERT INTO mysql.user (Host,User,ssl_cipher,x509_issuer,x509_subject) values ('192.168.0.10','haproxy_check','','','');
+
+CREATE USER 'haproxy_root'@'%' IDENTIFIED BY 'root';
+GRANT ALL PRIVILEGES ON *.* TO 'haproxy_root'@'%';
+ALTER USER 'haproxy_root'@'%' identified with mysql_native_password by 'root';
+FLUSH PRIVILEGES;
+
+***Comprobar los usuarios creados en mysql1 y mysql2***
+SELECT User, Host FROM mysql.user;
+
+***comprobar que se puede conectar a la base de datos desde haproxy***
+mysql -h 127.0.0.1 -u haproxy_root -p -e "SHOW DATABASES"
+insert into serviciosdb.test(id, name) values (3, 'haproxy');
